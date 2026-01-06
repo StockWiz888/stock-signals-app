@@ -21,58 +21,20 @@ if st.button("Generate Signal"):
             st.error("❌ No data found for this ticker. Try another one like AAPL or MSFT.")
         else:
             # --- Technical Indicators ---
-            data["RSI"] = RSIIndicator(data["Close"], window=14).rsi()
-            data["MA50"] = SMAIndicator(data["Close"], window=50).sma_indicator()
-            data["MA200"] = SMAIndicator(data["Close"], window=200).sma_indicator()
-            macd = MACD(data["Close"])
-            data["MACD_line"] = macd.macd()
-            data["Signal_line"] = macd.macd_signal()
-            data = data.dropna()
+            # Handle missing or invalid data
+data = data.dropna(subset=["Close"])
 
-            # --- Technical Score ---
-            def tech_score(row):
-                score = 0
-                if row["RSI"] < 30: score += 0.1
-                if row["MA50"] > row["MA200"]: score += 0.15
-                if row["MACD_line"] > row["Signal_line"]: score += 0.05
-                return score
-            data["technical_score"] = data.apply(tech_score, axis=1)
-
-            # --- Machine Learning Prediction ---
-            data["return"] = data["Close"].pct_change()
-            data["target"] = (data["return"].shift(-1) > 0).astype(int)
-            features = ["RSI", "MA50", "MA200", "MACD_line", "Signal_line"]
-            data = data.dropna()
-            if len(data) > 50:
-                model = RandomForestClassifier()
-                model.fit(data[features], data["target"])
-                data["pred_prob"] = model.predict_proba(data[features])[:, 1]
-            else:
-                data["pred_prob"] = 0.5
-
-            # --- Combine Scores ---
-            data["signal_score"] = 0.5 * data["technical_score"] + 0.5 * data["pred_prob"]
-            data["signal"] = np.where(
-                data["signal_score"] > 0.7, "BUY",
-                np.where(data["signal_score"] < 0.4, "SELL", "HOLD")
-            )
-
-            # --- Display Results ---
-            latest_signal = data["signal"].iloc[-1]
-            latest_score = data["signal_score"].iloc[-1]
-            st.metric("Latest Signal", latest_signal, f"{latest_score:.2f}")
-
-            # --- Plot Chart ---
-            fig, ax = plt.subplots(figsize=(10, 5))
-            ax.plot(data["Close"], label="Close Price", linewidth=1.2)
-            ax.scatter(data[data["signal"] == "BUY"].index,
-                       data[data["signal"] == "BUY"]["Close"],
-                       color="green", marker="^", label="BUY")
-            ax.scatter(data[data["signal"] == "SELL"].index,
-                       data[data["signal"] == "SELL"]["Close"],
-                       color="red", marker="v", label="SELL")
-            ax.legend()
-            st.pyplot(fig)
-
+if len(data) < 20:
+    st.error("⚠️ Not enough data to calculate indicators for this stock.")
+else:
+    # Safely compute indicators
+    try:
+        data["RSI"] = RSIIndicator(data["Close"].fillna(method='ffill'), window=14).rsi()
+        data["MA50"] = SMAIndicator(data["Close"], window=50).sma_indicator()
+        data["MA200"] = SMAIndicator(data["Close"], window=200).sma_indicator()
+        macd = MACD(data["Close"])
+        data["MACD_line"] = macd.macd()
+        data["Signal_line"] = macd.macd_signal()
     except Exception as e:
-        st.error(f"⚠️ Error: {e}")
+        st.error(f"Indicator calculation failed: {e}")
+        st.stop()
