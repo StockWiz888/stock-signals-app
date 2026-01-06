@@ -20,15 +20,18 @@ ticker = st.text_input("Enter Stock Symbol (e.g. AAPL, TSLA, MSFT)", "AAPL")
 if st.button("Generate Signal"):
 
     try:
+        # --- Normalize input ---
+        ticker = ticker.strip().upper()
+
         # --- Fetch Data ---
         data = yf.download(ticker, start="2020-01-01", progress=False)
 
-        if data.empty:
-            st.error("❌ No data found for this ticker. Try another symbol (e.g. AAPL, MSFT, NVDA).")
+        # --- Check Data ---
+        if data is None or data.empty or "Close" not in data.columns:
+            st.error("❌ Could not fetch valid data for this symbol. Try another (e.g., AAPL, MSFT, NVDA).")
         else:
             # --- Clean and Prepare Data ---
-            data = data.dropna(subset=["Close"])
-            data = data[["Close"]].copy()  # ensure 1D
+            data = data.dropna(subset=["Close"]).copy()
             close_prices = pd.Series(data["Close"]).astype(float)
 
             # --- Technical Indicators ---
@@ -40,7 +43,7 @@ if st.button("Generate Signal"):
                 data["MACD_line"] = macd.macd()
                 data["Signal_line"] = macd.macd_signal()
             except Exception as e:
-                st.error(f"⚠️ Indicator calculation error: {e}")
+                st.error(f"⚠️ Technical indicator error: {e}")
                 st.stop()
 
             data = data.dropna()
